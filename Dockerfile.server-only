@@ -1,0 +1,60 @@
+# Stage 1: install only happy-server dependencies
+FROM node:22-alpine AS deps
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++ ffmpeg bash
+
+WORKDIR /repo
+
+COPY package.json yarn.lock ./
+COPY scripts ./scripts
+COPY patches ./patches
+
+# Only create directories for packages we need
+RUN mkdir -p packages/happy-server packages/happy-wire
+
+COPY packages/happy-server/package.json packages/happy-server/
+COPY packages/happy-wire/package.json packages/happy-wire/
+
+# Workspace postinstall requirements (only for happy-server)
+COPY packages/happy-server/prisma packages/happy-server/prisma
+
+# Install dependencies (only happy-server and happy-wire, no happy-app/happy-cli)
+RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --frozen-lockfile
+
+# Stage 2: build the server
+FROM deps AS builder
+
+COPY packages/happy-wire ./packages/happy-wire
+COPY packages/happy-server ./packages/happy-server
+
+RUN yarn workspace @slopus/happy-wire build
+RUN yarn workspace happy-server build
+
+# Stage 3: runtime
+FROM node:22-alpine AS runner
+
+WORKDIR /repo
+
+# Runtime dependencies
+RUN apk add --no-cache python3 ffmpeg bash
+
+# Set environment to production
+ENV NODE_ENV=production
+
+# Copy necessary files from the builder stage
+COPY --from=builder /repo/node_modules /repo/node_modules
+COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
+COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
+
+WORKDIR /repo/packages/happy-server
+
+# Expose the port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Command to run the application
+CMD ["yarn", "start"]
