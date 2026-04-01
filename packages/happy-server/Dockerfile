@@ -32,14 +32,13 @@ RUN apk add --no-cache \
     python3 \
     bash
 
-# Copy node_modules from builder
+# Copy node_modules from builder (includes Prisma client)
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
 
-# Copy happy-server source, prisma, and generated files
+# Copy happy-server source and prisma
 COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
 COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
-COPY --from=builder /app/packages/happy-server/node_modules/.prisma ./packages/happy-server/node_modules/.prisma
 
 # Set working directory
 WORKDIR /app/packages/happy-server
