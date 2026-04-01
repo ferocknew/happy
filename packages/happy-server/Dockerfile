@@ -52,5 +52,13 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the server using tsx (TypeScript executor)
-CMD ["npx", "tsx", "sources/main.ts"]
+# Create data directory
+RUN mkdir -p /app/packages/happy-server/data
+
+# Set environment variables for standalone mode
+ENV DB_PROVIDER=pglite
+ENV PGLITE_DIR=/app/packages/happy-server/data/pglite
+ENV DATA_DIR=/app/packages/happy-server/data
+
+# Start the server using standalone mode
+CMD ["npx", "tsx", "sources/standalone.ts", "serve"]
