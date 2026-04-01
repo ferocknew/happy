@@ -1,81 +1,58 @@
-# Builder stage
-FROM node:22-alpine AS builder
+# Stage 1: install dependencies
+FROM node:22-alpine AS deps
 
-WORKDIR /app
+# Install build dependencies
+RUN apk add --no-cache python3 make g++ ffmpeg bash
 
-# Copy monorepo root files
+WORKDIR /repo
+
 COPY package.json yarn.lock ./
-COPY scripts ./scripts/
-COPY patches ./patches/
+COPY scripts ./scripts
+COPY patches ./patches
 
-# Copy happy-server files
-COPY packages/happy-server/package.json ./packages/happy-server/
+RUN mkdir -p packages/happy-server packages/happy-wire
+
+COPY packages/happy-server/package.json packages/happy-server/
+COPY packages/happy-wire/package.json packages/happy-wire/
+
+# Workspace postinstall requirements
+COPY packages/happy-server/prisma packages/happy-server/prisma
+
+RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --frozen-lockfile
+
+# Stage 2: build the server
+FROM deps AS builder
+
+COPY packages/happy-wire ./packages/happy-wire
 COPY packages/happy-server/tsconfig.json ./packages/happy-server/
-COPY packages/happy-server/prisma ./packages/happy-server/prisma
-
-# Install dependencies (skip happy-wire build, use published version)
-RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --immutable --frozen-lockfile
-
-# Copy happy-server source files
 COPY packages/happy-server/sources ./packages/happy-server/sources
 
-# Generate Prisma client
-RUN cd packages/happy-server && yarn generate
+RUN yarn workspace @slopus/happy-wire build
 
-# Install esbuild for bundling
-RUN yarn add -D esbuild @types/node
+# Stage 3: runtime
+FROM node:22-alpine AS runner
 
-# Bundle the standalone application
-RUN cd packages/happy-server && npx esbuild sources/standalone.ts \
-    --bundle \
-    --platform=node \
-    --target=node22 \
-    --format=esm \
-    --outfile=standalone.js \
-    --external:@prisma/client \
-    --external:prisma \
-    --external:/node_modules/* \
-    --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+WORKDIR /repo
 
-# Runner stage
-FROM node:22-alpine
+# Runtime dependencies
+RUN apk add --no-cache python3 ffmpeg bash
 
-WORKDIR /app
+# Set environment to production
+ENV NODE_ENV=production
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ffmpeg \
-    python3 \
-    bash
+# Copy necessary files from the builder stage
+COPY --from=builder /repo/node_modules /repo/node_modules
+COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
+COPY packages/happy-server /repo/packages/happy-server
 
-# Copy node_modules from builder (needed for runtime dependencies)
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
+WORKDIR /repo/packages/happy-server
 
-# Copy bundled app, prisma, and tsconfig
-COPY --from=builder /app/packages/happy-server/standalone.js ./packages/happy-server/standalone.js
-COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
-COPY --from=builder /app/packages/happy-server/tsconfig.json ./packages/happy-server/tsconfig.json
-COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
-
-# Create data directory
-RUN mkdir -p /app/packages/happy-server/data
-
-# Set working directory
-WORKDIR /app/packages/happy-server
-
-# Expose port
+# Expose the port
 EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Set environment variables for standalone mode
-ENV NODE_OPTIONS=--no-experimental-fetch
-ENV DB_PROVIDER=pglite
-ENV PGLITE_DIR=/app/packages/happy-server/data/pglite
-ENV DATA_DIR=/app/packages/happy-server/data
-
-# Start the server using bundled standalone
-CMD ["node", "standalone.js", "serve"]
+# Command to run the application
+CMD ["yarn", "start"]
