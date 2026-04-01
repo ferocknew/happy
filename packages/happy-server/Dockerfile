@@ -8,16 +8,12 @@ COPY package.json yarn.lock ./
 COPY scripts ./scripts/
 COPY patches ./patches/
 
-# Copy workspace packages
+# Copy happy-server files
 COPY packages/happy-server/package.json ./packages/happy-server/
-COPY packages/happy-wire/package.json ./packages/happy-wire/
 COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
-# Install dependencies with wire build skipped
+# Install dependencies (skip happy-wire build, use published version)
 RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --immutable --frozen-lockfile
-
-# Build happy-wire
-RUN cd packages/happy-wire && yarn build
 
 # Copy happy-server source files
 COPY packages/happy-server/sources ./packages/happy-server/sources
