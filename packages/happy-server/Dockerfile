@@ -61,4 +61,6 @@ ENV PGLITE_DIR=/app/packages/happy-server/data/pglite
 ENV DATA_DIR=/app/packages/happy-server/data
 
 # Start the server using standalone mode
-CMD ["npx", "tsx", "sources/standalone.ts", "serve"]
+# Use NODE_OPTIONS to disable experimental warnings
+ENV NODE_OPTIONS=--no-experimental-fetch
+CMD ["node", "--import", "tsx/esm", "sources/standalone.ts", "serve"]
