@@ -22,6 +22,21 @@ COPY packages/happy-server/sources ./packages/happy-server/sources
 # Generate Prisma client
 RUN cd packages/happy-server && yarn generate
 
+# Install esbuild for bundling
+RUN yarn add -D esbuild @types/node
+
+# Bundle the standalone application
+RUN cd packages/happy-server && npx esbuild sources/standalone.ts \
+    --bundle \
+    --platform=node \
+    --target=node22 \
+    --format=esm \
+    --outfile=standalone.js \
+    --external:@prisma/client \
+    --external:prisma \
+    --external:/node_modules/* \
+    --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+
 # Runner stage
 FROM node:22-alpine
 
@@ -33,14 +48,18 @@ RUN apk add --no-cache \
     python3 \
     bash
 
-# Copy node_modules from builder
+# Copy node_modules from builder (needed for runtime dependencies)
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
 
-# Copy happy-server source, prisma, and tsconfig
-COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
+# Copy bundled app, prisma, and tsconfig
+COPY --from=builder /app/packages/happy-server/standalone.js ./packages/happy-server/standalone.js
 COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
 COPY --from=builder /app/packages/happy-server/tsconfig.json ./packages/happy-server/tsconfig.json
+COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
+
+# Create data directory
+RUN mkdir -p /app/packages/happy-server/data
 
 # Set working directory
 WORKDIR /app/packages/happy-server
@@ -52,15 +71,11 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Create data directory
-RUN mkdir -p /app/packages/happy-server/data
-
 # Set environment variables for standalone mode
+ENV NODE_OPTIONS=--no-experimental-fetch
 ENV DB_PROVIDER=pglite
 ENV PGLITE_DIR=/app/packages/happy-server/data/pglite
 ENV DATA_DIR=/app/packages/happy-server/data
 
-# Start the server using standalone mode
-# Use NODE_OPTIONS to disable experimental warnings
-ENV NODE_OPTIONS=--no-experimental-fetch
-CMD ["node", "--import", "tsx/esm", "sources/standalone.ts", "serve"]
+# Start the server using bundled standalone
+CMD ["node", "standalone.js", "serve"]
