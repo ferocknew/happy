@@ -1,5 +1,5 @@
 # Builder stage
-FROM node:22 AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -26,15 +26,15 @@ COPY packages/happy-server/sources ./packages/happy-server/sources
 RUN cd packages/happy-server && yarn generate
 
 # Runner stage
-FROM node:22-slim
+FROM node:22-alpine
 
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     ffmpeg \
     python3 \
-    && rm -rf /var/lib/apt/lists/*
+    bash
 
 # Copy node_modules from builder
 COPY --from=builder /app/node_modules ./node_modules
