@@ -16,7 +16,7 @@ COPY packages/happy-wire/package.json packages/happy-wire/
 # Workspace postinstall requirements (only for happy-app)
 COPY packages/happy-app/patches packages/happy-app/patches
 
-# Install dependencies (only happy-app and happy-wire, no happy-server/happy-cli)
+# Install dependencies (only happy-app and happy-wire)
 RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --frozen-lockfile
 
 # Stage 2: build the web app
@@ -34,62 +34,32 @@ COPY packages/happy-wire ./packages/happy-wire
 COPY packages/happy-app ./packages/happy-app
 
 RUN yarn workspace @slopus/happy-wire build
-RUN yarn workspace happy-app expo export --platform web --output-dir dist
 
-# Stage 3: runtime with Nginx
-FROM nginx:alpine AS runner
+# Stage 3: runtime
+FROM node:22-alpine AS runner
 
-COPY --from=builder /repo/packages/happy-app/dist /usr/share/nginx/html
+WORKDIR /repo
 
-# Remove default nginx configuration
-RUN rm /etc/nginx/conf.d/default.conf
+# Runtime dependencies
+RUN apk add --no-cache python3 bash
 
-# Create custom nginx configuration directly in the Dockerfile
-RUN echo 'server { \
-    listen 80; \
-    \
-    location /_expo/ { \
-        root   /usr/share/nginx/html; \
-        try_files $uri =404; \
-    } \
-    \
-    location /assets/ { \
-        root   /usr/share/nginx/html; \
-        try_files $uri =404; \
-    } \
-    \
-    location /.well-known/ { \
-        root   /usr/share/nginx/html; \
-        try_files $uri =404; \
-    } \
-    \
-    location / { \
-        root   /usr/share/nginx/html; \
-        index  index.html index.htm; \
-        try_files $uri $uri.html $uri/index.html $uri/index.htm $uri/ /index.html /index.htm =404; \
-    } \
-    \
-    error_page 500 502 503 504 /50x.html; \
-    location = /50x.html { \
-        root /usr/share/nginx/html; \
-        try_files $uri @redirect_to_index; \
-        internal; \
-    } \
-    \
-    error_page 404 = @handle_404; \
-    \
-    location @handle_404 { \
-        root /usr/share/nginx/html; \
-        try_files /404.html @redirect_to_index; \
-        internal; \
-    } \
-    \
-    location @redirect_to_index { \
-        return 302 /; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Set environment to production
+ENV NODE_ENV=production
+ENV APP_ENV=production
 
-# Expose the standard nginx port
-EXPOSE 80
+# Copy necessary files from the builder stage
+COPY --from=builder /repo/node_modules /repo/node_modules
+COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
+COPY packages/happy-app /repo/packages/happy-app
 
-# Nginx starts automatically in the foreground with CMD ["nginx", "-g", "daemon off;"]
+WORKDIR /repo/packages/happy-app
+
+# Expose the port
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:8081/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Command to run the web app
+CMD ["yarn", "web"]
