@@ -6,13 +6,13 @@ WORKDIR /app
 # Copy monorepo root files
 COPY package.json yarn.lock ./
 COPY packages/happy-server/package.json ./packages/happy-server/
+COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
 # Install dependencies
 RUN yarn install --immutable
 
 # Copy happy-server source
 COPY packages/happy-server/sources ./packages/happy-server/sources
-COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
 # Build TypeScript for type checking
 RUN cd packages/happy-server && yarn build
