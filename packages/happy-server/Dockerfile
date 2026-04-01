@@ -10,6 +10,7 @@ COPY patches ./patches/
 
 # Copy happy-server files
 COPY packages/happy-server/package.json ./packages/happy-server/
+COPY packages/happy-server/tsconfig.json ./packages/happy-server/
 COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
 # Install dependencies (skip happy-wire build, use published version)
@@ -36,9 +37,10 @@ RUN apk add --no-cache \
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
 
-# Copy happy-server source and prisma
+# Copy happy-server source, prisma, and tsconfig
 COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
 COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
+COPY --from=builder /app/packages/happy-server/tsconfig.json ./packages/happy-server/tsconfig.json
 
 # Set working directory
 WORKDIR /app/packages/happy-server
