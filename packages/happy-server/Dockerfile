@@ -5,19 +5,22 @@ WORKDIR /app
 
 # Copy monorepo root files
 COPY package.json yarn.lock ./
-COPY packages/package.json ./packages/
+COPY scripts ./scripts/
+COPY patches ./patches/
+
+# Copy workspace packages
 COPY packages/happy-server/package.json ./packages/happy-server/
 COPY packages/happy-wire/package.json ./packages/happy-wire/
 COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
-# Install dependencies (skip happy-wire build for Docker)
-RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --immutable
+# Install dependencies with wire build skipped
+RUN SKIP_HAPPY_WIRE_BUILD=1 yarn install --immutable --frozen-lockfile
 
-# Copy happy-server source
-COPY packages/happy-server/sources ./packages/happy-server/sources
-
-# Build happy-wire (required for happy-server)
+# Build happy-wire
 RUN cd packages/happy-wire && yarn build
+
+# Copy happy-server source files
+COPY packages/happy-server/sources ./packages/happy-server/sources
 
 # Generate Prisma client
 RUN cd packages/happy-server && yarn generate
