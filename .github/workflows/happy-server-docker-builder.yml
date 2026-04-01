@@ -51,7 +51,7 @@ jobs:
           type=semver,pattern={{major}}
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
-          type=match,pattern=\d+\.\d+,match=^\d+\.\d+,group=0
+          type=match,pattern=(\d+\.\d+),group=1
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
