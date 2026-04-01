@@ -11,7 +11,8 @@ COPY packages/happy-server/package.json ./packages/happy-server/
 RUN yarn install --immutable
 
 # Copy happy-server source
-COPY packages/happy-server ./packages/happy-server
+COPY packages/happy-server/sources ./packages/happy-server/sources
+COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
 # Build TypeScript for type checking
 RUN cd packages/happy-server && yarn build
@@ -34,8 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
 
-# Copy happy-server source and generated files
-COPY --from=builder /app/packages/happy-server ./packages/happy-server
+# Copy happy-server source, prisma, and generated files
+COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
+COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
+COPY --from=builder /app/packages/happy-server/node_modules/.prisma ./packages/happy-server/node_modules/.prisma
 
 # Set working directory
 WORKDIR /app/packages/happy-server
