@@ -10,6 +10,7 @@ COPY patches ./patches/
 
 # Copy happy-server files
 COPY packages/happy-server/package.json ./packages/happy-server/
+COPY packages/happy-server/tsconfig.json ./packages/happy-server/
 COPY packages/happy-server/prisma ./packages/happy-server/prisma
 
 # Install dependencies (skip happy-wire build, use published version)
@@ -20,6 +21,9 @@ COPY packages/happy-server/sources ./packages/happy-server/sources
 
 # Generate Prisma client
 RUN cd packages/happy-server && yarn generate
+
+# Build TypeScript to JavaScript
+RUN cd packages/happy-server && npx tsc
 
 # Runner stage
 FROM node:22-alpine
@@ -32,13 +36,14 @@ RUN apk add --no-cache \
     python3 \
     bash
 
-# Copy node_modules from builder (includes Prisma client)
+# Copy node_modules from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/happy-server/node_modules ./packages/happy-server/node_modules
 
-# Copy happy-server source and prisma
-COPY --from=builder /app/packages/happy-server/sources ./packages/happy-server/sources
+# Copy compiled JavaScript, prisma, and generated files
+COPY --from=builder /app/packages/happy-server/dist ./packages/happy-server/dist
 COPY --from=builder /app/packages/happy-server/prisma ./packages/happy-server/prisma
+COPY --from=builder /app/packages/happy-server/node_modules/.prisma ./packages/happy-server/node_modules/.prisma
 
 # Set working directory
 WORKDIR /app/packages/happy-server
@@ -51,4 +56,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start the server
-CMD ["node", "sources/main.js"]
+CMD ["node", "dist/main.js"]
